@@ -1,0 +1,7 @@
+"idUsuario": 1 (Administrador), 
+    "correo": "juan.perez@usm.cl",
+    "password": "MiClaveSegura123"
+
+"idUsuario": 2 (Docente),
+    "correo": "jorge.perez@usm.cl",
+    "password": "MiClaveSegura123"
