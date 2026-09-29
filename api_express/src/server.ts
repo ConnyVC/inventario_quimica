@@ -3,6 +3,7 @@ import router from './router';
 import db from "./config/database";
 import cors, { CorsOptions } from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config();
 
@@ -37,6 +38,9 @@ server.use(cors(corsOptions));
 
 // Habilitar el uso de JSON en las peticiones
 server.use(Express.json());
+
+// 2. Servir la carpeta de imágenes de manera pública/estática
+server.use('/images', Express.static(path.join(__dirname, '../public/images')));
 
 // Todas las rutas con /api
 server.use('/api', router);

@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react'
 import { jwtDecode } from 'jwt-decode'
 
+import { getCategorias } from '../services/CategoriaPeligrosidadService'
+import { type CategoriaPeligrosidad } from '../types/categoriaPeligrosidad'
+
+import type { Reactivo } from '../types/reactivo'
+
+import { getReactivos } from '../services/ReactivoService'
+
+import ReactivoFila from '../components/ReactivoFila'
+import { Link, useLoaderData } from 'react-router-dom'
+
 interface UserTokenPayload {
   idUsuario: number
   correo: string
@@ -8,20 +18,35 @@ interface UserTokenPayload {
   nombreRol: string
 }
 
-interface Reactivo {
-  idReactivo: number
-  nombreQuimico: string
-  formulaQuimica: string
-  categoriaPeligrosidad: string
-  stockReal: number
-  unidadMedida: string
-  puntoCritico: number
-  estadoAlerta: 'Óptimo' | 'Bajo Reorden' | 'Crítico'
+// Loader que React Router ejecuta antes de renderizar la página
+export async function loader() {
+  try {
+    const reactivos = await getReactivos()
+    return Array.isArray(reactivos) ? reactivos : []
+  } catch (error) {
+    console.error('Error al cargar reactivos en loader:', error)
+    return []
+  }
 }
 
 export default function Home() {
   const [esAdmin, setEsAdmin] = useState<boolean>(false)
-  const [reactivos, setReactivos] = useState<Reactivo[]>([])
+
+  // Estado para almacenar las categorías recibidas de la base de datos
+  const [categorias, setCategorias] = useState<CategoriaPeligrosidad[]>([])
+
+  const dataLoader = useLoaderData() as Reactivo[]
+  const [reactivos, setReactivos] = useState<Reactivo[]>(
+    Array.isArray(dataLoader) ? dataLoader : []
+  )
+
+  // Sincroniza el estado local cada vez que el loader vuelva a traer información actualizada
+  useEffect(() => {
+    if (Array.isArray(dataLoader)) {
+     setReactivos(dataLoader)
+    }
+  }, [dataLoader])
+
   const [busqueda, setBusqueda] = useState<string>('')
   const [filtroCategoria, setFiltroCategoria] = useState<string>('')
 
@@ -38,22 +63,66 @@ export default function Home() {
     }
   }, [])
 
+  // Cargar Reactivos directamente al montar el componente
+  useEffect(() => {
+    const cargarDatosReactivos = async () => {
+      try {
+        const datos = await getReactivos()
+        console.log('Reactivos recibidos desde el useEffect:', datos)
+        if (Array.isArray(datos) && datos.length > 0) {
+          setReactivos(datos)
+        }
+      } catch (error) {
+        console.error('Error al obtener reactivos en Home:', error)
+      }
+    }
+
+    cargarDatosReactivos()
+  }, [])
+
+  // Cargar Categorías desde la API
+  useEffect(() => {
+    const cargarCategorias = async () => {
+      try {
+        const data = await getCategorias()
+        setCategorias(data)
+      } catch (error) {
+        console.error('Error al obtener las categorías de peligrosidad:', error)
+      }
+    }
+
+    cargarCategorias()
+  }, [])
+
+  console.log('Reactivos cargados en el Home:', reactivos)
+
   // Filtrado dinámico por texto y categoría
-  const reactivosFiltrados = reactivos.filter((r) => {
-    const coincideTexto =
-      r.nombreQuimico.toLowerCase().includes(busqueda.toLowerCase()) ||
-      r.formulaQuimica.toLowerCase().includes(busqueda.toLowerCase())
+  const reactivosFiltrados = reactivos.filter((item) => {
+    const texto = busqueda.toLowerCase().trim()
+
+    const nombreQuimico = (item.nombreQuimico || '').toLowerCase()
+    const formulaQuimica = (item.formulaQuimica || '').toLowerCase()
+
+    const coincideNombreOFormula =
+      nombreQuimico.includes(texto) || formulaQuimica.includes(texto)
+
+    // Usamos Number() para asegurar que los IDs de categoría coincidan sin importar el tipo
+    const categoriaEncontrada = categorias.find(
+      (cat) => Number(cat.idCategoria) === Number(item.idCategoria)
+    )
+
+    const categoriaNombre = categoriaEncontrada ? categoriaEncontrada.nombreCategoria : ''
 
     const coincideCategoria =
-      filtroCategoria === '' || r.categoriaPeligrosidad === filtroCategoria
+      filtroCategoria === '' || categoriaNombre === filtroCategoria
 
-    return coincideTexto && coincideCategoria
+    return coincideNombreOFormula && coincideCategoria
   })
 
-  // Métricas calculadas dinámicamente
+  // Cálculos dinámicos para las métricas de las tarjetas
   const totalReactivos = reactivos.length
   const stockCriticoCount = reactivos.filter(
-    (r) => r.estadoAlerta === 'Bajo Reorden' || r.estadoAlerta === 'Crítico'
+    (item) => item.stockReal <= item.puntoCritico
   ).length
 
   return (
@@ -87,7 +156,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-
+{/*
         <div className="col-12 col-sm-6 col-xl-3">
           <div className="card border-0 shadow-sm rounded-3 h-100">
             <div className="card-body d-flex align-items-center">
@@ -101,7 +170,8 @@ export default function Home() {
             </div>
           </div>
         </div>
-
+*/}
+{/*
         <div className="col-12 col-sm-6 col-xl-3">
           <div className="card border-0 shadow-sm rounded-3 h-100">
             <div className="card-body d-flex align-items-center">
@@ -115,6 +185,7 @@ export default function Home() {
             </div>
           </div>
         </div>
+*/}
       </div>
 
       {/* SECCIÓN INVENTARIO */}
@@ -127,13 +198,13 @@ export default function Home() {
           {/* Botones de acción (Exclusivos de Administrador) */}
           {esAdmin && (
             <div className="d-flex gap-2">
-              <button
+              <Link
+                to="/reactivos/crear"
                 className="btn btn-primary btn-sm"
-                data-bs-toggle="modal"
-                data-bs-target="#modalNuevoReactivo"
               >
                 <i className="bi bi-plus-circle me-1"></i> Nuevo Reactivo
-              </button>
+              </Link>
+{/*              
               <button
                 className="btn btn-outline-secondary btn-sm"
                 data-bs-toggle="modal"
@@ -141,16 +212,17 @@ export default function Home() {
               >
                 <i className="bi bi-box-arrow-up-right me-1"></i> Registrar Salida/Despacho
               </button>
+*/}
             </div>
           )}
         </div>
-
+        
         {/* Barra de Filtro / Búsqueda */}
         <div className="card-body pt-0">
           <div className="row g-2 mb-3">
             <div className="col-md-6 col-lg-4">
-              <div className="input-group input-group-sm">
-                <span className="input-group-text bg-light">
+              <div className="input-group">
+                <span className="input-group-text bg-light text-muted">
                   <i className="bi bi-search"></i>
                 </span>
                 <input
@@ -160,6 +232,16 @@ export default function Home() {
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
                 />
+                {/* Botón opcional para limpiar la búsqueda rápido si hay texto */}
+                {busqueda && (
+                  <button
+                    className="btn btn-outline-secondary"
+                    type="button"
+                    onClick={() => setBusqueda('')}
+                  >
+                    <i className="bi bi-x-lg"></i>
+                  </button>
+                )}
               </div>
             </div>
             <div className="col-md-4 col-lg-3">
@@ -169,10 +251,11 @@ export default function Home() {
                 onChange={(e) => setFiltroCategoria(e.target.value)}
               >
                 <option value="">Todas las categorías</option>
-                <option value="Mortal">Mortal</option>
-                <option value="Corrosivo">Corrosivo</option>
-                <option value="Atención">Atención</option>
-                <option value="Nocivo">Nocivo</option>
+                {categorias.map((cat) => (
+                  <option key={cat.idCategoria} value={cat.nombreCategoria}>
+                    {cat.nombreCategoria}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -194,46 +277,30 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody>
-                {reactivosFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan={esAdmin ? 8 : 7} className="text-center py-4 text-muted">
-                      No se encontraron reactivos registrados
-                    </td>
-                  </tr>
-                ) : (
-                  reactivosFiltrados.map((item) => (
-                    <tr key={item.idReactivo}>
-                      <td>{item.idReactivo}</td>
-                      <td className="fw-semibold">{item.nombreQuimico}</td>
-                      <td><code>{item.formulaQuimica}</code></td>
-                      <td>
-                        <span className="badge bg-dark">{item.categoriaPeligrosidad}</span>
-                      </td>
-                      <td>{`${item.stockReal} ${item.unidadMedida}`}</td>
-                      <td>{`${item.puntoCritico} ${item.unidadMedida}`}</td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            item.estadoAlerta === 'Óptimo'
-                              ? 'bg-success'
-                              : 'bg-danger'
-                          }`}
-                        >
-                          {item.estadoAlerta}
-                        </span>
-                      </td>
-                      {/* Acciones (Eliminar/Editar) */}
-                      {esAdmin && (
-                        <td className="text-end">
-                          <button className="btn btn-outline-danger btn-sm border-0">
-                            <i className="bi bi-trash"></i>
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))
-                )}
-              </tbody>
+              {reactivosFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan={esAdmin ? 8 : 7} className="text-center">No hay reactivos registrados</td>
+                </tr>
+              ) : (
+                reactivosFiltrados.map((item) => {
+                // Buscar el nombre de la categoría asociada al reactivo
+                const categoriaEncontrada = categorias.find(
+                  (cat) => Number(cat.idCategoria) === Number(item.idCategoria)
+                )
+
+                return (
+                  <ReactivoFila
+                    key={item.idReactivo}
+                    esAdmin={esAdmin}
+                    reactivo={{
+                      ...item,
+                      categoriaNombre: categoriaEncontrada ? categoriaEncontrada.nombreCategoria : 'Sin Categoría',
+                    }}
+                  />
+                )
+                })
+              )}
+            </tbody>
             </table>
           </div>
         </div>
